@@ -25,6 +25,7 @@ from evidence_service import (
     update_evidence_metadata,
     upload_evidence,
 )
+from historical_import_ui import render_historical_import_preview
 from uuid import uuid4
 
 
@@ -41,7 +42,9 @@ if st.session_state.pop("reset_observation_form", False):
     st.session_state["create_observation_location"] = ""
     st.session_state["create_observation_contractor"] = ""
     st.session_state["create_observation_category"] = "Quality"
-    st.session_state["create_observation_source"] = "Direct observation"
+    st.session_state["create_observation_information_source"] = (
+        "Direct observation"
+    )
     st.session_state["create_observation_description"] = ""
     st.session_state["create_observation_required_action"] = ""
     st.session_state["create_observation_responsible_party"] = ""
@@ -144,8 +147,13 @@ if user is not None:
 
     all_observations = list(observations)
 
-    project_tab, observation_tab, evidence_tab = st.tabs(
-        ["Projects", "Site observations", "Evidence management"]
+    project_tab, observation_tab, evidence_tab, import_tab = st.tabs(
+        [
+            "Projects",
+            "Site observations",
+            "Evidence management",
+            "Historical import (preview)",
+        ]
     )
 
     with project_tab:
@@ -365,14 +373,68 @@ if user is not None:
                     project_id=selected_filter_id,
                 )
 
+
         if observations:
+            today = date.today()
+            overdue_observations = []
+
+            for observation in observations:
+                due_date_value = observation.get("due_date")
+                status = observation.get("status")
+
+                if status not in {"Open", "In Progress"}:
+                    continue
+
+                if not due_date_value:
+                    continue
+
+                try:
+                    parsed_due_date = date.fromisoformat(
+                        str(due_date_value)
+                    )
+                except ValueError:
+                    continue
+
+                if parsed_due_date < today:
+                    overdue_observations.append(observation)
+
+            st.metric(
+                "Overdue Actions",
+                len(overdue_observations),
+            )
+
+            if overdue_observations:
+                st.warning(
+                    "Some open actions have passed their due dates. "
+                    "Review the records below."
+                )
+
+                st.dataframe(
+                    [
+                        {
+                            "Observation ID": item.get("observation_id"),
+                            "Project": item.get("project_id"),
+                            "Contractor": item.get("contractor"),
+                            "Site": item.get("site"),
+                            "Due Date": item.get("due_date"),
+                            "Status": item.get("status"),
+                            "Required Action": item.get("required_action"),
+                        }
+                        for item in overdue_observations
+                    ],
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
             st.dataframe(
                 observations,
                 use_container_width=True,
                 hide_index=True,
             )
         else:
+            st.metric("Overdue Actions", 0)
             st.info("No observations match this selection.")
+
 
     with evidence_tab:
         st.subheader("Evidence management")
@@ -657,6 +719,10 @@ if user is not None:
                             "Deletion failed. The file may still exist; "
                             "refresh the evidence register before retrying."
                         )
+
+    with import_tab:
+        # Preview only: this screen has no access to the database client.
+        render_historical_import_preview()
 
 
 else:
