@@ -1,7 +1,21 @@
 
 import streamlit as st
-from datetime import date
+
 import sqlite3
+
+from datetime import date, timedelta
+from uuid import uuid4
+
+from whatsapp_parser import parse_whatsapp_text
+from whatsapp_digest import filter_messages_by_date
+from digest_extractor import build_digest_candidates
+from digest_storage import (
+    save_digest,
+    list_digest_batches,
+    get_digest_batch,
+    get_digest_items,
+    update_saved_digest_item,
+)
 
 from observation_model import SiteObservation, validate_observation
 from storage import (
@@ -24,6 +38,8 @@ from observation_filters import filter_observations
 from io import BytesIO
 from action_tracking import get_overdue_observations
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+from digest_review import update_digest_item
 
 st.set_page_config(
     page_title="Construction Site Assistant",
@@ -95,7 +111,7 @@ with st.form("observation_form"):
         key="new_observation_photo_captions",
     )
     required_action = st.text_area("Required follow-up action")
-    
+
     due_date = st.date_input(
         "Action due date (optional)",
         value=None,
@@ -459,7 +475,7 @@ else:
                     except ValueError as error:
                         st.error(str(error))
 
-            
+
             if observation.verification_notes:
                 st.write(
                     "**Verification notes:**",
@@ -773,3 +789,261 @@ else:
         )
     else:
         st.info("Select one or more observations to preview the report.")
+
+
+
+# ---------------------------------------------------------
+# WhatsApp Daily Site Supervision Digest
+# ---------------------------------------------------------
+
+st.divider()
+st.header("WhatsApp Site Supervision Digest")
+
+st.write(
+    "Import a WhatsApp text export, select a date range, "
+    "and save its messages as candidates for human review."
+)
+
+st.warning(
+    "Messages are not verified site observations. "
+    "Review each item before using it in a management report."
+)
+
+uploaded_chat = st.file_uploader(
+    "Upload WhatsApp chat export (.txt)",
+    type=["txt"],
+    key="digest_chat_upload",
+)
+
+if uploaded_chat is not None:
+    try:
+        chat_text = uploaded_chat.getvalue().decode("utf-8-sig")
+        parsed_messages = parse_whatsapp_text(chat_text)
+
+        if not parsed_messages:
+            st.warning(
+                "No messages were recognized. Check that this is "
+                "a supported WhatsApp text export."
+            )
+        else:
+            earliest_date = min(
+                message.timestamp.date()
+                for message in parsed_messages
+            )
+            latest_date = max(
+                message.timestamp.date()
+                for message in parsed_messages
+            )
+
+            st.caption(
+                f"Recognized {len(parsed_messages)} messages "
+                f"from {earliest_date} to {latest_date}."
+            )
+
+            date_col1, date_col2 = st.columns(2)
+
+            with date_col1:
+                digest_start_date = st.date_input(
+                    "Digest start date",
+                    value=latest_date,
+                    min_value=earliest_date,
+                    max_value=latest_date,
+                    key="digest_start_date",
+                )
+
+            with date_col2:
+                digest_end_date = st.date_input(
+                    "Digest end date",
+                    value=latest_date,
+                    min_value=earliest_date,
+                    max_value=latest_date,
+                    key="digest_end_date",
+                )
+
+            if digest_start_date > digest_end_date:
+                st.error(
+                    "The start date cannot be later than the end date."
+                )
+            else:
+                selected_messages = filter_messages_by_date(
+                    parsed_messages,
+                    digest_start_date,
+                    digest_end_date,
+                )
+
+                st.write(
+                    f"Messages in selected period: "
+                    f"{len(selected_messages)}"
+                )
+
+                if st.button(
+                    "Create and Save Digest Batch",
+                    disabled=not selected_messages,
+                    key="create_digest_batch",
+                ):
+                    digest = build_digest_candidates(
+                        parsed_messages,
+                        digest_start_date,
+                        digest_end_date,
+                    )
+                    batch_id = (
+                        f"DIGEST-{digest_start_date.isoformat()}-"
+                        f"{uuid4().hex[:8].upper()}"
+                    )
+
+                    try:
+                        save_digest(digest, batch_id)
+                        st.success(
+                            f"Saved digest batch: {batch_id}"
+                        )
+                        st.rerun()
+                    except Exception as error:
+                        st.error(
+                            f"Could not save digest batch: {error}"
+                        )
+
+    except UnicodeDecodeError:
+        st.error(
+            "The uploaded file could not be decoded as UTF-8. "
+            "Please check the file encoding."
+        )
+
+st.subheader("Saved Digest Batches")
+
+saved_batches = list_digest_batches()
+
+if not saved_batches:
+    st.info("No digest batches have been saved yet.")
+else:
+    batch_options = {
+        batch["batch_id"]: (
+            f'{batch["batch_id"]} | '
+            f'{batch["start_date"]} to {batch["end_date"]}'
+        )
+        for batch in saved_batches
+    }
+
+    selected_batch_id = st.selectbox(
+        "Choose a saved batch",
+        options=list(batch_options.keys()),
+        format_func=lambda batch_id: batch_options[batch_id],
+        key="saved_digest_batch",
+    )
+
+    batch_details = get_digest_batch(selected_batch_id)
+    saved_items = get_digest_items(selected_batch_id)
+
+    if batch_details is not None:
+        st.caption(
+            f"Selected period: {batch_details['start_date']} "
+            f"to {batch_details['end_date']}"
+        )
+
+        pending_count = sum(
+            item.review_status == "Pending review"
+            for item in saved_items
+        )
+
+
+        st.metric("Messages awaiting review", pending_count)
+        st.write(f"Total messages in batch: {len(saved_items)}")
+
+        st.subheader("Review Messages")
+
+        for item_index, item in enumerate(saved_items, start=1):
+            with st.expander(
+                f"{item_index}. {item.timestamp:%Y-%m-%d %H:%M} | "
+                f"{item.sender or 'Unknown sender'} | "
+                f"{item.review_status}"
+            ):
+                st.caption(f"Original source line: {item.source_line}")
+                st.write("**Original message**")
+                st.text(item.statement)
+
+                form_key = f"review_form_{selected_batch_id}_{item_index}"
+
+                with st.form(form_key):
+                    category_options = [
+                        "Progress",
+                        "Quality",
+                        "HSE",
+                        "Traffic",
+                        "Management Instruction",
+                        "Confirmation Required",
+                    ]
+                    evidence_options = [
+                        "Direct observation",
+                        "Contractor-reported",
+                        "Management instruction",
+                        "Other message",
+                    ]
+                    status_options = [
+                        "Pending review",
+                        "Confirmed",
+                        "Rejected/Corrected",
+                    ]
+
+                    category = st.selectbox(
+                        "Category",
+                        category_options,
+                        index=category_options.index(item.category),
+                        key=f"review_category_{selected_batch_id}_{item_index}",
+                    )
+
+                    evidence_source = st.selectbox(
+                        "Evidence source",
+                        evidence_options,
+                        index=evidence_options.index(item.evidence_source),
+                        key=f"review_evidence_{selected_batch_id}_{item_index}",
+                    )
+
+                    contractor = st.text_input(
+                        "Contractor (optional)",
+                        value=item.contractor or "",
+                        key=f"review_contractor_{selected_batch_id}_{item_index}",
+                    )
+
+                    location = st.text_input(
+                        "Location / Chainage (optional)",
+                        value=item.location or "",
+                        key=f"review_location_{selected_batch_id}_{item_index}",
+                    )
+
+                    follow_up = st.text_area(
+                        "Required follow-up (optional)",
+                        value=item.follow_up or "",
+                        key=f"review_followup_{selected_batch_id}_{item_index}",
+                    )
+
+                    review_status = st.selectbox(
+                        "Review decision",
+                        status_options,
+                        index=status_options.index(item.review_status),
+                        key=f"review_status_{selected_batch_id}_{item_index}",
+                    )
+
+                    submitted = st.form_submit_button("Save Review")
+
+                if submitted:
+                    try:
+                        updated_item = update_digest_item(
+                            item,
+                            category=category,
+                            evidence_source=evidence_source,
+                            review_status=review_status,
+                            contractor=contractor,
+                            location=location,
+                            follow_up=follow_up,
+                        )
+
+                        update_saved_digest_item(
+                            selected_batch_id,
+                            item_index,
+                            updated_item,
+                        )
+
+                        st.success("Review saved.")
+                        st.rerun()
+
+                    except ValueError as error:
+                        st.error(str(error))

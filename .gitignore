@@ -18,6 +18,8 @@ htmlcov/
 # Local database and SQLite sidecar files
 observations.db
 observations.db-*
+whatsapp_digest.db
+whatsapp_digest.db-*
 
 # Private site evidence and media
 photo_evidence/
@@ -29,6 +31,8 @@ photo_evidence/
 *.zip
 *WhatsApp*
 *Export*
+!whatsapp_parser.py
+!whatsapp_digest.py
 transfer file.txt
 
 # Generated reports (do not ignore all Word documents)

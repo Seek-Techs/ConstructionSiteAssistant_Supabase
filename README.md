@@ -1,141 +1,198 @@
 # Construction Site Assistant
 
-A personal, local application for recording construction site observations, managing follow-up actions, maintaining photographic evidence and preparing structured management reports.
+A cloud-enabled application for construction site supervision, observation management, photographic evidence, and structured reporting.
 
-## 1. Purpose
+## Overview
 
-The Construction Site Assistant helps a construction site supervisor record, retrieve, organize and report site observations consistently.
+Construction Site Assistant helps site supervisors document construction activities, record quality and health, safety and environment (HSE) observations, track corrective actions, and maintain an organized record of site evidence.
 
-It is intended to support contractor monitoring, quality control, HSE observations, progress reporting and follow-up action tracking.
+The cloud version uses Supabase for authentication, database access, and private evidence storage, with Streamlit providing the user interface.
 
-## 2. Current Features
+## Features
 
-- Create, validate, save and edit site observations.
-- Record the observation date, contractor, site, location, category and information source.
-- Distinguish direct observations from contractor-reported information.
-- Record required actions, responsible parties, due dates, status and verification notes.
-- Search and filter saved observations.
-- Maintain a project register and associate observations with projects.
-- Upload and retrieve photographic evidence.
-- Generate WhatsApp-ready observation text.
-- Generate Word reports with a report-details table (project, site, contractor, date, optional reference), a management summary in tables, categorized observation tables, numbered and captioned photographs, a basis-of-report statement and a prepared-by / checked-by sign-off block.
-- Add an optional caption to each photograph when recording an observation (one caption per line, in photo order). Without a caption the file name is used.
-- Store observation records locally using SQLite.
+- **Project management:** Create and manage construction project records.
+- **Site observations:** Record observation dates, sites, locations, contractors, categories, descriptions, and information sources.
+- **Follow-up tracking:** Document required actions, responsible parties, and observation status.
+- **Photographic evidence:** Upload, retrieve, and manage evidence linked to projects or observations.
+- **Evidence classification:** Organize evidence under Quality, HSE, Progress, Testing, and Other categories.
+- **User-scoped access:** Retrieve and manage records within the authenticated user's authorized scope.
+- **Cloud storage:** Store evidence in a private Supabase Storage bucket.
+- **Automated testing:** Maintain tests for core application services and supporting functionality.
 
-## 3. Technology
+## Technology Stack
 
 - Python
 - Streamlit
-- SQLite
-- python-docx
-- pytest
+- Supabase Authentication
+- Supabase PostgreSQL
+- Supabase Storage
+- `python-docx`
+- `pytest`
 
-## 4. Requirements
+## Project Structure
 
-Install Python 3.11 or newer (developed on Python 3.13). Install the dependencies listed in `requirements.txt` into the project's virtual environment:
+| File or directory | Purpose |
+|---|---|
+| `cloud_app.py` | Cloud application entry point |
+| `auth_helpers.py` | Authentication and Supabase client helpers |
+| `cloud_data_service.py` | Project and observation data operations |
+| `evidence_service.py` | Evidence metadata and storage operations |
+| `evidence_helpers.py` | Evidence validation and storage-path helpers |
+| `supabase/migrations/` | Database schema migration files |
+| `tests/` | Automated tests |
+| `requirements.txt` | Python dependencies |
+
+Additional modules support observation models, filtering, reporting, and WhatsApp digest workflows.
+
+## Local Setup
+
+### 1. Requirements
+
+Install Python 3.11 or newer and Git.
+
+### 2. Clone the repository
+
+```powershell
+git clone https://github.com/Seek-Techs/ConstructionSiteAssistant_Supabase.git
+cd ConstructionSiteAssistant_Supabase
+```
+
+### 3. Create and activate a virtual environment
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+### 4. Install dependencies
 
 ```powershell
 python -m pip install -r requirements.txt
 ```
 
-The application is developed for Windows. The automated tests were also run on Linux.
+### 5. Configure Supabase credentials
 
-## 5. Running the Application
+Create a local file named `.streamlit/secrets.toml` with the following settings:
 
-Open a terminal in the project directory.
+```toml
+SUPABASE_URL = "https://YOUR_PROJECT_REF.supabase.co"
+SUPABASE_PUBLISHABLE_KEY = "YOUR_SUPABASE_PUBLISHABLE_KEY"
+```
 
-Activate the existing virtual environment in Windows PowerShell:
+Replace the placeholders with the appropriate values from your Supabase project.
+
+**Security:** Never commit `.streamlit/secrets.toml`, passwords, access tokens, or Supabase service-role keys to Git. Use the publishable key with the application's configured authentication and database access policies.
+
+### 6. Run the application
 
 ```powershell
-.\.venv\Scripts\Activate.ps1
+python -m streamlit run cloud_app.py
 ```
 
-If PowerShell blocks script execution, use Command Prompt to activate the environment instead:
+Streamlit will provide a local address for opening the application in a browser.
 
-```bat
-.venv\Scripts\activate.bat
-```
+## Supabase Configuration
 
-Start the application:
+The application requires a configured Supabase project with the database tables, access policies, and private storage buckets expected by the application.
 
-```powershell
-python -m streamlit run app.py
-```
+Database schema changes are documented under `supabase/migrations/`. Apply migrations only when setting up or intentionally updating the database schema, and verify the target database before executing any migration.
 
-Streamlit will display a local address in the terminal. Open that address in your browser to use the application.
+Do not rerun migrations against an already configured database without checking their status and purpose.
 
-## 6. Running Tests
+## Deployment
 
-Activate the project's virtual environment and run:
+The cloud entry point is `cloud_app.py`.
+
+To deploy using Streamlit Community Cloud:
+
+1. Push the application code to the GitHub repository.
+2. Create a new app in Streamlit Community Cloud and select this repository.
+3. Select the `master` branch and set the main file path to `cloud_app.py`.
+4. Add `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` under the app's Secrets settings.
+5. Deploy and verify authentication, project creation, observation management, and evidence upload using a test account.
+
+Keep all credentials in Streamlit's Secrets settings rather than in the repository.
+
+## Testing
+
+Run the automated test suite locally:
 
 ```powershell
 python -m pytest -q
 ```
 
-If pytest is not installed in the active environment, run `python -m pip install -r requirements.txt` and try again.
+Review any failures before deploying changes.
 
-All tests use temporary databases. They never read or change your real `observations.db`.
+## Development Principles
 
-## 7. Local Data and Photographic Evidence
+- Preserve confidentiality of site records and photographic evidence.
+- Enforce authenticated, authorized access to project and observation data.
+- Validate uploaded evidence and maintain appropriate metadata.
+- Keep changes testable and reviewable.
+- Avoid committing local databases, private evidence, credentials, or temporary backup files.
 
-Observation records are stored in a local SQLite database. Photographic evidence is stored in local folders associated with observation records, while photo metadata is maintained in the database.
+## Project Status
 
-Keep the database and photographic evidence folders intact. Back up both before making changes to the application's storage structure or moving the project to another computer.
+This project is under active development. Verify the deployed application's functionality and configuration before relying on it for operational site records.
 
-Backup in PowerShell (run from the project folder; the backup is a dated copy beside it):
+## Current Limitations
 
-```powershell
-$stamp = Get-Date -Format "yyyyMMdd_HHmm"
-New-Item -ItemType Directory "..\ConstructionSiteAssistant_backup_$stamp" | Out-Null
-Copy-Item observations.db "..\ConstructionSiteAssistant_backup_$stamp\"
-Copy-Item photo_evidence "..\ConstructionSiteAssistant_backup_$stamp\" -Recurse
-```
+The application is under active development. The following limitations should be considered when using or evaluating it:
 
-Photo records store the full file path used at upload time. If the project folder is moved to another location or computer, the application and reports find the photographs again by looking in the project's own `photo_evidence/<observation ID>/` folder, so keep `observations.db` and `photo_evidence/` together.
+- **Authentication persistence:** Users may need to sign in again after a browser refresh or a new session. Persistent sign-in improvements remain a future enhancement.
+- **Cloud deployment:** Availability depends on the hosting platform, network connectivity, and Supabase service availability.
+- **Feature parity:** The cloud version may not yet include every feature available in the original local application.
+- **Reporting:** Advanced reporting, automated management summaries, and downloadable report options may require further integration and validation.
+- **Notifications:** Automated reminders for overdue corrective actions and pending inspections are not yet confirmed as implemented.
+- **Offline operation:** The cloud application requires network access and is not designed for full offline data entry and synchronization.
+- **Audit and review workflows:** Further development may be required for comprehensive audit history, formal approval workflows, and controlled record revisions.
+- **Production readiness:** Access policies, file-upload controls, backup and recovery procedures, and application behavior should be tested before the application is used as the sole recordkeeping system for critical site operations.
 
-Observations created before projects were introduced have no project. Open the observation in the app and use "Link to Project". The application never guesses a project, and it will not change an observation that is already linked.
+These limitations should be reviewed as development progresses. Actual availability depends on the deployed version.
 
-## 8. Reporting and Verification
+## Future Development Roadmap
 
-Reports are generated from saved observations selected by the user.
+The following features are planned enhancements, subject to development priorities and testing.
 
-The management summary in the Word report describes the selected observations; it does not necessarily represent every observation recorded for a project.
+### Phase 1 — Reliability and Security
 
-Direct observations and contractor-reported information must remain distinguishable. An action must not be represented as completed, and compliance must not be represented as verified, unless the relevant verification has occurred.
+- Improve authentication and session persistence.
+- Strengthen error handling and user feedback.
+- Expand automated tests for cloud workflows.
+- Review database access policies and private file-storage permissions.
+- Establish practical backup, recovery, and deployment procedures.
 
-## 9. Current Limitations
+### Phase 2 — Site Records and Reporting
 
-This is a local, single-user MVP.
+- Enhance Word and PDF report generation.
+- Produce daily, weekly, and project-level management summaries.
+- Improve observation search, filtering, and status tracking.
+- Add configurable project, contractor, and reporting references.
+- Improve evidence captions, categorization, and downloadable evidence records.
 
-The current scope excludes:
+### Phase 3 — Follow-up and Management Workflows
 
-- Multi-user accounts and access permissions.
-- Cloud hosting and company-wide deployment.
-- Automated WhatsApp message sending.
-- AI-generated compliance decisions or inspection approvals.
-- Complex enterprise project, contract, resource and cost management.
-- Advanced dashboards beyond the basic operational views required by the MVP.
+- Add reminders for overdue actions and upcoming inspection dates.
+- Introduce review, verification, and approval workflows.
+- Maintain a more comprehensive history of record changes.
+- Improve dashboards for outstanding observations, recurring issues, and contractor performance indicators.
 
-Automated reminders are also deferred.
+### Phase 4 — Field Productivity and Integration
 
-## 10. Development Principles
+- Explore mobile-friendly field data entry and photo capture.
+- Investigate offline capture with controlled synchronization.
+- Add configurable export and data-import workflows.
+- Explore integration with email, messaging, and project-management tools.
 
-- Implement one feature at a time.
-- Understand the code before extending it.
-- Test changes and investigate failures before proceeding.
-- Preserve existing records when modifying the database.
-- Record important technical decisions.
-- Use fictional or anonymized information for testing.
-- Do not present unverified information as independently verified.
+### Phase 5 — Construction Intelligence
 
-## 11. Current Development Status
+- Develop project-level quality and HSE trend analysis.
+- Identify recurring nonconformities and outstanding corrective actions.
+- Explore analytics for progress monitoring and contractor reporting.
+- Evaluate AI-assisted report drafting and observation classification, with human review before records are finalized.
 
-Core observation management, project association, photographic evidence and Word report generation are implemented. The automated test suite (48 tests) passes, including an end-to-end workflow test. The Word report has a running header, "Page X of Y" footer, a scope statement in the management summary, due dates, numbered photo captions and a sign-off block.
+## Roadmap and Release Policy
 
-Not yet done: a manual run of the app in your own browser on Windows with your real data, and reviewing your older records' project links with the "Link to Project" control. See `docs/PROJECT_CONTEXT.md` for the verified status and known limitations.
+The roadmap describes intended development, not guaranteed delivery dates. Features will be introduced incrementally after implementation, testing, and security review.
 
-The MVP should only be declared complete after those checks have passed.
-
-## 12. Project Scope
-
-Refer to the Project Spec for the original purpose, intended user, initial requirements, learning principles and revised MVP completion criteria.
+The application should be evaluated against the features available in the specific deployed release. Future enhancements must not be treated as existing capabilities until they have been implemented and verified.
